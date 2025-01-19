@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Bezier Curve</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+        canvas {
+            border: 1px solid black;
+            margin-top: 20px;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Bezier Curve and Polar Visualization</h1>
+    <label for="num-points">Number of Points:</label>
+    <input type="number" id="num-points" min="2" max="10" value="4">
+    <button id="set-points">Set Points</button>
+    <canvas id="canvas" width="750" height="500" style="display:none;"></canvas>
+    <div class="controls" style="display:none;" id="controls">
+        <label for="t">t:</label>
+        <input type="range" id="t" min="0" max="1" step="0.01" value="0.5">
+        <span id="t-value">0.5</span>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const tInput = document.getElementById('t');
+        const tValue = document.getElementById('t-value');
+        const numPointsInput = document.getElementById('num-points');
+        const setPointsButton = document.getElementById('set-points');
+        const controlsDiv = document.getElementById('controls');
+
+        let conturPoints = [];
+        let numPoints = 0;
+
+        setPointsButton.addEventListener('click', () => {
+            numPoints = parseInt(numPointsInput.value);
+            conturPoints = [];
+            canvas.style.display = 'block';
+            controlsDiv.style.display = 'block';
+            alert(`Click on the canvas to set ${numPoints} points.`);
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (conturPoints.length < numPoints) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                conturPoints.push({ x, y });
+                draw();
+
+                if (conturPoints.length === numPoints) {
+                    alert('All points set!');
+                }
+            }
+        });
+
+        tInput.addEventListener('input', () => {
+            tValue.textContent = tInput.value;
+            draw();
+        });
+
+        // Биномиален коефициент
+        function binomial(n, k) {
+            if (k === 0 || k === n) return 1;
+            return binomial(n - 1, k - 1) + binomial(n - 1, k);
+        }
+
+        function bezierBlossomPolar(points, t) {
+            const n = points.length - 1;
+            let result = { x: 0, y: 0 };
+            for (let i = 0; i <= n; i++) {
+                const binomialCoeff = binomial(n, i);
+                const bernstein = binomialCoeff * Math.pow(1 - t, n - i) * Math.pow(t, i);
+                result.x += bernstein * points[i].x;
+                result.y += bernstein * points[i].y;
+            }
+            return result;
+        }
+
+        // Функция за производната на Безие кривата
+        function bezierDerivative(points, t) {
+            const n = points.length - 1;
+            let derivative = { x: 0, y: 0 };
+            for (let i = 0; i < n; i++) {
+                const diffX = points[i + 1].x - points[i].x;
+                const diffY = points[i + 1].y - points[i].y;
+                const binomialCoeff = n * Math.pow(1 - t, n - i - 1) * Math.pow(t, i);
+                derivative.x += binomialCoeff * diffX;
+                derivative.y += binomialCoeff * diffY;
+            }
+            return derivative;
+        }
+
+        // Функция за първата поляра
+        function polarFirstDerivative(points, t, t1) {
+            const bezierPoint = bezierBlossomPolar(points, t);
+            const derivative = bezierDerivative(points, t);
+            return {
+                x: bezierPoint.x + (t1 - t) * derivative.x,
+                y: bezierPoint.y + (t1 - t) * derivative.y
+            };
+        }
+        
+        // Функция за рисуване на правите между първоначалните точки
+        function drawConturLines(points) {
+            for (let i = 0; i < points.length - 1; i++) {
+                const { x: x1, y: y1 } = points[i];
+                const { x: x2, y: y2 } = points[i + 1];
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = 'black';  // Цвет за правите между контурните точки
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        // Рисуване на първоначалните точки
+        function drawConturPoints(points) {
+            for (const { x, y } of points) {
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+            }
+        }
+
+        // Функция за рисуване на кривата на Безие спрямо първоначалните точки
+        function drawBezierCurve(points) {
+            ctx.beginPath();
+            for (let t = 0; t <= 1; t += 0.01) {
+                const { x, y } = bezierBlossomPolar(points, t);
+                if (t === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        // Интерполация на de Casteljau
+        // Функция за интерполация 
+        function linearInterpolation(p1, p2, t) {
+            return {
+                x: (1 - t) * p1.x + t * p2.x,
+                y: (1 - t) * p1.y + t * p2.y
+            };
+        }
+
+        // Връщаме точките за полярата
+        // Полярна крива
+        function polarCurve(points, t) {
+            const polarPoints = [];
+            for (let i = 0; i < points.length - 1; i++) {
+                polarPoints.push(linearInterpolation(points[i], points[i + 1], t));
+            }
+            return polarPoints;
+        }
+
+        // Рисуване на полярата
+        function drawPolarBezierCurve(points) {
+            const t = parseFloat(tInput.value);
+            const polarPoints = polarCurve(points, t);
+            ctx.beginPath();
+            for (let tParam = 0; tParam <= 1; tParam += 0.01) {
+                const { x, y } = bezierBlossomPolar(polarPoints, tParam);
+                if (tParam === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'purple'; // Цвет за полярата
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Функция за рисуване на контролните точки и правите между тях
+        function drawInterpolatedPointsAndLines(points, t) {
+            const interpolatedPoints = [];
+            for (let i = 0; i < points.length - 1; i++) {
+                interpolatedPoints.push(linearInterpolation(points[i], points[i + 1], t));
+            }
+
+            // Рисуване на контролните точки
+            for (const { x, y } of interpolatedPoints) {
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = 'green';  // Контролните точки в зелено
+                ctx.fill();
+            }
+
+            // Рисуване на правите между контролните точки
+            for (let i = 0; i < interpolatedPoints.length - 1; i++) {
+                const { x: x1, y: y1 } = interpolatedPoints[i];
+                const { x: x2, y: y2 } = interpolatedPoints[i + 1];
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = 'green';  // Цвет за правите между контролните точки
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (conturPoints.length > 1) {
+                drawConturLines(conturPoints);  // Рисуване на правите между контурните точки
+                drawBezierCurve(conturPoints); // Рисуване на кривата на Безие
+                drawInterpolatedPointsAndLines(conturPoints, parseFloat(tInput.value));  // Рисуване на контролните точки и правите между тях
+                drawPolarBezierCurve(conturPoints);  // Рисуване на кривата на Безие като поляра
+            }
+            drawConturPoints(conturPoints);
+        }
+    </script>
+</body>
+</html>
